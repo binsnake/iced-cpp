@@ -142,11 +142,11 @@ Packaged docs are written to:
 ## Layout
 
 - `include/` public and internal headers (`include/iced_x86`, `include/iced_x86/internal`)
-- `iced_x86/src/` implementation
-- `iced_x86/tests/` test suite
+- `src/iced_x86/src/` library implementation
+- `tests/iced_x86/` test suite
 - `docs/` Doxygen config and release packaging helpers
 - `examples/` runnable API examples across core components
-- `src/` top-level CMake entrypoint for library build
+- `src/` top-level CMake entrypoints
 - `bin/` reserved for tools/examples
 
 ## Install

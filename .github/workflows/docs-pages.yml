@@ -9,9 +9,11 @@ on:
     paths:
       - "docs/**"
       - "include/**"
-      - "iced_x86/src/**"
+      - "src/iced_x86/src/**"
+      - "tests/iced_x86/**"
       - "CMakeLists.txt"
       - "src/CMakeLists.txt"
+      - "src/iced_x86/CMakeLists.txt"
       - "README.md"
 
 permissions:

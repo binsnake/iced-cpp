@@ -30,7 +30,7 @@ target_compile_features(iced_x86 PUBLIC cxx_std_23)
 target_compile_definitions(iced_x86 PUBLIC ICED_X86_CONSTEXPR_HANDLERS=0)
 target_include_directories(iced_x86
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
@@ -42,7 +42,7 @@ endif()
 
 if(ICEDCPP_BUILD_TESTS)
     enable_testing()
-    add_subdirectory(tests)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/tests/iced_x86 ${CMAKE_BINARY_DIR}/tests/iced_x86)
 endif()
 
 install(TARGETS iced_x86
@@ -51,7 +51,7 @@ install(TARGETS iced_x86
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../include/iced_x86/
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/iced_x86/
     DESTINATION include/iced_x86
     FILES_MATCHING PATTERN "*.hpp"
 )
