@@ -860,7 +860,7 @@ void Decoder::decode_evex( Instruction& instruction ) noexcept {
 	    return;
 	}
 
-	auto table = get_mvex_table( map_index );
+	auto table = get_evex_table( map_index );
 	if ( table.empty() || opcode >= table.size() ) {
 	  set_invalid_instruction();
 	  return;
