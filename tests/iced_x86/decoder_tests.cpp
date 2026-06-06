@@ -76,3 +76,13 @@ ICED_TEST(decoder_set_position_rewinds_stream) {
     test::require(rewound.has_value(), "decode rewound nop failed");
     test::require_eq(iced_x86::Mnemonic::NOP, rewound->mnemonic(), "rewound mnemonic");
 }
+
+ICED_TEST(decoder_decodes_evex_vpaddb_masked) {
+    const std::vector<std::uint8_t> bytes = {0x62, 0xF1, 0x75, 0x09, 0xFC, 0xC2};
+    iced_x86::Decoder decoder(64, bytes, 0x6000);
+    auto decoded = decoder.decode();
+    test::require(decoded.has_value(), "decode EVEX vpaddb failed");
+    test::require_eq(iced_x86::Code::EVEX_VPADDB_XMM_K1Z_XMM_XMMM128, decoded->code(), "EVEX vpaddb code");
+    test::require_eq(static_cast<std::size_t>(bytes.size()), decoder.position(), "position after EVEX vpaddb");
+    test::require(!decoder.can_decode(), "decoder should be at end after EVEX vpaddb");
+}

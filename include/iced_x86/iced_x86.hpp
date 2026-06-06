@@ -22,6 +22,7 @@
 // Instruction
 #include "iced_x86/instruction.hpp"
 #include "iced_x86/memory_operand.hpp"
+#include "iced_x86/operand.hpp"
 
 // Decoder
 #include "iced_x86/decoder_error.hpp"
@@ -55,6 +56,9 @@
 
 // Register info
 #include "iced_x86/register_info.hpp"
+
+// High-level helpers (control-flow predicates, operand formatting)
+#include "iced_x86/instruction_helpers.hpp"
 
 // OpCode info
 #include "iced_x86/op_code_info.hpp"

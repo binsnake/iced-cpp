@@ -21,6 +21,10 @@
 
 namespace iced_x86 {
 
+	// Forward declarations for the ergonomic operand views (defined in operand.hpp).
+	struct Operand;
+	struct OperandList;
+
 	/// @brief A decoded x86/x64 instruction.
 	///
 	/// @details This struct contains all information about a decoded instruction.
@@ -173,6 +177,26 @@ namespace iced_x86 {
 		/// @brief Sets the register for operand 4 (no-op, value must be NONE).
 		/// @details Operand 4 register is always NONE and cannot be changed.
 		constexpr void set_op4_register([[maybe_unused]] Register value) noexcept { /* no-op, op4 reg is always NONE */ }
+
+		// === Ergonomic Operand Views (defined in operand.hpp) ===
+		// Include "iced_x86/operand.hpp" to use these. They return non-owning views
+		// (a pointer to this Instruction + an operand index), so this Instruction
+		// must outlive the returned Operand/OperandList.
+
+		/// @brief Gets a structured view of operand @p index (0-4).
+		[[nodiscard]] Operand op(uint32_t index) const noexcept;
+		/// @brief Gets a structured view of operand 0.
+		[[nodiscard]] Operand op0() const noexcept;
+		/// @brief Gets a structured view of operand 1.
+		[[nodiscard]] Operand op1() const noexcept;
+		/// @brief Gets a structured view of operand 2.
+		[[nodiscard]] Operand op2() const noexcept;
+		/// @brief Gets a structured view of operand 3.
+		[[nodiscard]] Operand op3() const noexcept;
+		/// @brief Gets a structured view of operand 4.
+		[[nodiscard]] Operand op4() const noexcept;
+		/// @brief Gets an indexable operand list: `instruction.operands()[i]`.
+		[[nodiscard]] OperandList operands() const noexcept;
 
 		// === Memory Operand ===
 
