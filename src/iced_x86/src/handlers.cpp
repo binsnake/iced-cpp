@@ -2344,7 +2344,13 @@ void OpCodeHandler_PushEv::decode( const OpCodeHandler* self_ptr, Decoder& decod
 void OpCodeHandler_PushIb2::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_PushIb2*>( self_ptr );
   auto op_size = decoder.state().operand_size;
-  
+  // PUSH has no 32-bit form in 64-bit mode: the operand size defaults to 64 (a 66 prefix
+  // selects the 16-bit form). Promote SIZE32 -> SIZE64 so code64/IMMEDIATE8TO64 are chosen,
+  // matching OpCodeHandler_PushSimple2.
+  if ( decoder.is_64bit_mode() && op_size == OpSize::SIZE32 ) {
+    op_size = OpSize::SIZE64;
+  }
+
   Code codes[] = { self->code16, self->code32, self->code64 };
   instr.set_code( codes[static_cast<std::size_t>( op_size )] );
   
@@ -2367,7 +2373,13 @@ void OpCodeHandler_PushIb2::decode( const OpCodeHandler* self_ptr, Decoder& deco
 void OpCodeHandler_PushIz::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_PushIz*>( self_ptr );
   auto op_size = decoder.state().operand_size;
-  
+  // PUSH has no 32-bit form in 64-bit mode: the operand size defaults to 64 (a 66 prefix
+  // selects the 16-bit form). Promote SIZE32 -> SIZE64 so code64/IMMEDIATE32TO64 are chosen,
+  // matching OpCodeHandler_PushSimple2.
+  if ( decoder.is_64bit_mode() && op_size == OpSize::SIZE32 ) {
+    op_size = OpSize::SIZE64;
+  }
+
   Code codes[] = { self->code16, self->code32, self->code64 };
   instr.set_code( codes[static_cast<std::size_t>( op_size )] );
   
