@@ -546,12 +546,14 @@ ICED_TEST(encoder_roundtrip_jcc_rel16_16_zero) {
     require_equal_bytes(bytes, out, "jcc_rel16_16_zero");
 }
 
-ICED_TEST(encoder_push_imm8_64_current_behavior) {
+ICED_TEST(encoder_roundtrip_push_imm8_64) {
+    // 6A 80 in 64-bit mode is PUSHQ_IMM8 (8-byte push, sign-extended imm8). Once the decoder
+    // selects the 64-bit code/operand kind (see the PushIb2/PushIz long-mode default fix), the
+    // instruction round-trips through the encoder back to 6A 80.
     const std::vector<std::uint8_t> bytes = {0x6A, 0x80};
     const auto instr = decode_single(64, bytes, 0xD180);
-    Encoder encoder(64);
-    auto result = encoder.encode(instr, 0xD180);
-    test::require(!result.has_value(), "push imm8 in 64-bit mode is currently expected to fail in this encoder");
+    const auto out = encode_single(64, instr, 0xD180);
+    require_equal_bytes(bytes, out, "push_imm8_64");
 }
 
 ICED_TEST(encoder_roundtrip_push_imm8_16) {
