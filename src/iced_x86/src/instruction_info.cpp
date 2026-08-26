@@ -6,6 +6,10 @@
 #include "iced_x86/code.hpp"
 #include "iced_x86/op_kind.hpp"
 #include "iced_x86/instruction.hpp"
+#include "iced_x86/internal/encoder_data.hpp"
+#include "iced_x86/internal/encoder_EncFlags3.hpp"
+
+#include <iterator>
 
 namespace iced_x86 {
 
@@ -152,15 +156,16 @@ namespace iced_x86 {
 	namespace InstructionExtensions {
 
 		EncodingKind encoding(const Instruction& instruction) noexcept {
-			// Determine encoding from instruction code
-			// This is simplified - real implementation uses lookup tables
-			Code code = instruction.code();
-			(void)code;
-
-			// Check for VEX-encoded instructions
-			// VEX instructions typically have specific code ranges
-			// For now, return Legacy as default
-			return EncodingKind::LEGACY;
+			// Read the encoding out of ENC_FLAGS3, the same per-Code table OpCodeInfo builds from.
+			// This used to return LEGACY unconditionally, which quietly disabled every caller's
+			// VEX/EVEX check: seven_core's Executor::simd_profile_allows() gates AVX and AVX-512 on
+			// it, so a build configured with those off still accepted VEX/EVEX instructions.
+			const auto index = static_cast<std::size_t>(instruction.code());
+			if (index >= std::size(internal::ENC_FLAGS3)) {
+				return EncodingKind::LEGACY;
+			}
+			const auto flags = internal::ENC_FLAGS3[index];
+			return static_cast<EncodingKind>((flags >> internal::EncFlags3::ENCODING_SHIFT) & internal::EncFlags3::ENCODING_MASK);
 		}
 
 		std::span<const CpuidFeature> cpuid_features(const Instruction& instruction) noexcept {
