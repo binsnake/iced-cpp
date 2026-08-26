@@ -751,12 +751,22 @@ void OpCodeHandler_Ev_Sw::decode( const OpCodeHandler* self_ptr, Decoder& decode
 void OpCodeHandler_Evj::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_Evj*>( self_ptr );
   auto op_size = decoder.state().operand_size;
-  Code codes[] = { self->code16, self->code32, self->code64 };
-  instr.set_code( codes[static_cast<std::size_t>( op_size )] );
+
+  // Near indirect CALL/JMP (FF /2, FF /4). These default to a 64-bit operand size in long mode and
+  // there is no 32-bit form to encode -- 66h gives the 16-bit one, and REX.W is redundant, so real
+  // compilers never emit it. Indexing the code table by operand_size therefore reported the RM32
+  // form for a plain `jmp rax`, with ECX-style register labels and a 4-byte memory size. Same
+  // mode/operand-size shape as OpCodeHandler_PushEv, which FF /6 already got right.
+  const bool wide = op_size != OpSize::SIZE16;
+  if ( decoder.is_64bit_mode() ) {
+    instr.set_code( wide ? self->code64 : self->code16 );
+  } else {
+    instr.set_code( op_size == OpSize::SIZE32 ? self->code32 : self->code16 );
+  }
 
   // Op0: Ev (register or memory for indirect jump)
   if ( decoder.state().mod_ == 3 ) {
-    Register reg_base = get_gpr_base( op_size );
+    Register reg_base = decoder.is_64bit_mode() ? ( wide ? Register::RAX : Register::AX ) : get_gpr_base( op_size );
     uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base;
     instr.set_op0_register( add_reg( reg_base, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
@@ -1852,33 +1862,36 @@ void OpCodeHandler_Jb2::decode( const OpCodeHandler* self_ptr, Decoder& decoder,
   }
   int8_t rel8 = static_cast<int8_t>( *imm_opt );
   
+  // These are LOOP/LOOPE/LOOPNE and JCXZ/JECXZ/JRCXZ. Two independent things pick the Code: the
+  // branch width comes from the operand size, but the COUNTER REGISTER comes from the address
+  // size, which is why every field is named code<operandSize>_<addressSize>. Deciding both from
+  // operand_size made the unprefixed 64-bit form (E2/E3, address size 64 by default and never
+  // REX.W-able) come out as the ECX variant, so a plain `loop` counted down ECX and a `jrcxz`
+  // tested ECX -- both visible divergences from hardware on any count above 2^32.
+  const bool addr64 = decoder.state().address_size == OpSize::SIZE64;
+  const bool addr32 = decoder.state().address_size == OpSize::SIZE32;
   if ( decoder.is_64bit_mode() ) {
-    if ( decoder.state().operand_size == OpSize::SIZE64 ) {
-      uint64_t target = static_cast<uint64_t>( static_cast<int64_t>( rel8 ) + static_cast<int64_t>( decoder.current_ip64() ) );
-      instr.set_near_branch64( target );
-      instr.set_code( self->code64_64 );
-      instr.set_op0_kind( OpKind::NEAR_BRANCH64 );
-    } else if ( decoder.state().operand_size == OpSize::SIZE16 ) {
+    if ( decoder.state().operand_size == OpSize::SIZE16 ) {
       uint16_t target = static_cast<uint16_t>( static_cast<int32_t>( rel8 ) + static_cast<int32_t>( decoder.current_ip32() ) );
       instr.set_near_branch16( target );
-      instr.set_code( self->code16_64 );
+      instr.set_code( addr64 ? self->code16_64 : self->code16_32 );
       instr.set_op0_kind( OpKind::NEAR_BRANCH16 );
     } else {
       uint64_t target = static_cast<uint64_t>( static_cast<int64_t>( rel8 ) + static_cast<int64_t>( decoder.current_ip64() ) );
       instr.set_near_branch64( target );
-      instr.set_code( self->code64_32 );
+      instr.set_code( addr64 ? self->code64_64 : self->code64_32 );
       instr.set_op0_kind( OpKind::NEAR_BRANCH64 );
     }
   } else {
     if ( decoder.state().operand_size == OpSize::SIZE32 ) {
       uint32_t target = static_cast<uint32_t>( static_cast<int32_t>( rel8 ) + static_cast<int32_t>( decoder.current_ip32() ) );
       instr.set_near_branch32( target );
-      instr.set_code( self->code32_32 );
+      instr.set_code( addr32 ? self->code32_32 : self->code32_16 );
       instr.set_op0_kind( OpKind::NEAR_BRANCH32 );
     } else {
       uint16_t target = static_cast<uint16_t>( static_cast<int32_t>( rel8 ) + static_cast<int32_t>( decoder.current_ip32() ) );
       instr.set_near_branch16( target );
-      instr.set_code( self->code16_32 );
+      instr.set_code( addr32 ? self->code16_32 : self->code16_16 );
       instr.set_op0_kind( OpKind::NEAR_BRANCH16 );
     }
   }
