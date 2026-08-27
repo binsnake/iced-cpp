@@ -4083,39 +4083,15 @@ void OpCodeHandler_Wbinvd::decode( const OpCodeHandler* /*self_ptr*/, Decoder& /
 // VEX Handlers
 // ============================================================================
 
-// Helper to get XMM/YMM/ZMM register based on vector length
-static Register get_vec_reg( Register base_reg, uint32_t index, VectorLength vl ) {
-  // base_reg specifies the base register class (XMM0, YMM0, or ZMM0).
-  // The index is added to the appropriate base depending on vector length.
-  // For VEX instructions, base_reg is typically XMM0 and vl determines the actual size.
-  
-  // Determine the register class and offset within that class
-  uint32_t base_val = static_cast<uint32_t>( base_reg );
-  uint32_t xmm0_val = static_cast<uint32_t>( Register::XMM0 );
-  uint32_t ymm0_val = static_cast<uint32_t>( Register::YMM0 );
-  uint32_t zmm0_val = static_cast<uint32_t>( Register::ZMM0 );
-  
-  // Calculate offset within the XMM/YMM/ZMM class
-  uint32_t offset;
-  if ( base_val >= zmm0_val ) {
-    offset = base_val - zmm0_val;
-  } else if ( base_val >= ymm0_val ) {
-    offset = base_val - ymm0_val;
-  } else {
-    offset = base_val - xmm0_val;
-  }
-  
-  // Select the appropriate base based on vector length
-  Register actual_base;
-  if ( vl == VectorLength::L512 ) {
-    actual_base = Register::ZMM0;
-  } else if ( vl == VectorLength::L256 ) {
-    actual_base = Register::YMM0;
-  } else {
-    actual_base = Register::XMM0;
-  }
-  
-  return add_reg( actual_base, offset + index );
+// Helper to get the operand register for a VEX/EVEX handler.
+//
+// The vector length is NOT consulted here. OpCodeHandler_VEX_VectorLength and its EVEX counterpart
+// already pick a different sub-handler per L before any operand is read, and each of those carries
+// the register class it wants in base_reg. Re-deriving the class from the length instead threw that
+// away, which was wrong for the LIG group -- the scalar instructions, where L is architecturally
+// ignored -- so vmovss with L set named YMM registers for something that only touches 32 bits.
+static Register get_vec_reg( Register base_reg, uint32_t index, VectorLength /*vl*/ ) {
+  return add_reg( base_reg, index );
 }
 
 // VEX W handler - dispatches to W=0 or W=1 handler based on W flag
