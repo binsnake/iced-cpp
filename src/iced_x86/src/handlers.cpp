@@ -5261,11 +5261,15 @@ void OpCodeHandler_VEX_VK_HK_RK::decode( const OpCodeHandler* self_ptr, Decoder&
   instr.set_op0_register( add_reg( Register::K0, reg_idx ) );
   instr.set_op0_kind( OpKind::REGISTER );
   
-  // Op1: HK (vvvv field) - mask register source
-  uint32_t vvvv_idx = decoder.state().vvvv;
+  // Op1: HK (vvvv field) - mask register source. vvvv is four bits wide in long mode and there
+  // are only eight mask registers, so the top bit has to come off before it is used as an index.
+  if ( decoder.invalid_check_mask() != 0 && decoder.state().vvvv > 7 ) {
+    decoder.set_invalid_instruction();
+  }
+  uint32_t vvvv_idx = decoder.state().vvvv & 7;
   instr.set_op1_register( add_reg( Register::K0, vvvv_idx ) );
   instr.set_op1_kind( OpKind::REGISTER );
-  
+
   // Op2: RK (r/m field) - mask register source
   uint32_t rm_idx = decoder.state().rm;
   instr.set_op2_register( add_reg( Register::K0, rm_idx ) );
@@ -5458,11 +5462,15 @@ void OpCodeHandler_VEX_Gq_HK_RK::decode( const OpCodeHandler* self_ptr, Decoder&
   instr.set_op0_register( add_reg( Register::RAX, reg_idx ) );
   instr.set_op0_kind( OpKind::REGISTER );
   
-  // Op1: HK (vvvv field) - mask register source
-  uint32_t vvvv_idx = decoder.state().vvvv;
+  // Op1: HK (vvvv field) - mask register source. vvvv is four bits wide in long mode and there
+  // are only eight mask registers, so the top bit has to come off before it is used as an index.
+  if ( decoder.invalid_check_mask() != 0 && decoder.state().vvvv > 7 ) {
+    decoder.set_invalid_instruction();
+  }
+  uint32_t vvvv_idx = decoder.state().vvvv & 7;
   instr.set_op1_register( add_reg( Register::K0, vvvv_idx ) );
   instr.set_op1_kind( OpKind::REGISTER );
-  
+
   // Op2: RK (r/m field) - mask register source
   uint32_t rm_idx = decoder.state().rm;
   instr.set_op2_register( add_reg( Register::K0, rm_idx ) );
@@ -7649,7 +7657,7 @@ void OpCodeHandler_MVEX_KHW::decode( const OpCodeHandler* self_ptr, Decoder& dec
   instruction.set_code( self.code );
 
   // K destination
-  uint32_t reg_num = decoder.state().reg + decoder.state().extra_register_base;
+  uint32_t reg_num = ( decoder.state().reg + decoder.state().extra_register_base ) & 7;
   Register dst_reg = static_cast<Register>( static_cast<uint32_t>( Register::K0 ) + reg_num );
   instruction.set_op0_register( dst_reg );
 
@@ -7675,7 +7683,7 @@ void OpCodeHandler_MVEX_KHWIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   instruction.set_code( self.code );
 
   // K destination
-  uint32_t reg_num = decoder.state().reg + decoder.state().extra_register_base;
+  uint32_t reg_num = ( decoder.state().reg + decoder.state().extra_register_base ) & 7;
   Register dst_reg = static_cast<Register>( static_cast<uint32_t>( Register::K0 ) + reg_num );
   instruction.set_op0_register( dst_reg );
 
