@@ -284,7 +284,9 @@ void Decoder::decode_table( internal::HandlerEntry handler, Instruction& instruc
 	// 2. Modrm hasn't already been read for this instruction
 	if ( handler.handler->has_modrm && !state_.modrm_read ) {
 	  if ( data_ptr_ >= max_data_ptr_ ) [[unlikely]] {
-	    set_invalid_instruction();
+	    // Ran out of buffer, which is not the same as a bad opcode: the caller tells the two apart
+	    // by NO_MORE_BYTES, and only then does it know to fault on the page the instruction ran into.
+	    state_.flags |= StateFlags::IS_INVALID | StateFlags::NO_MORE_BYTES;
 	    return;
 	  }
 	  auto m = static_cast<uint32_t>( *data_ptr_++ );
@@ -979,7 +981,7 @@ void Decoder::decode_xop( Instruction& instruction ) noexcept {
 
 	// Read XOP2 + opcode (2 bytes) like Rust does
 	if ( !can_read( 2 ) ) {
-	  set_invalid_instruction();
+	  state_.flags |= StateFlags::IS_INVALID | StateFlags::NO_MORE_BYTES;
 	  return;
 	}
 	data_ptr_ += 2;  // Skip XOP2 and opcode bytes
