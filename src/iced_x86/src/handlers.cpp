@@ -2120,8 +2120,15 @@ void OpCodeHandler_M_REXW::decode( const OpCodeHandler* self_ptr, Decoder& decod
 void OpCodeHandler_Ms::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_Ms*>( self_ptr );
   auto op_size = decoder.state().operand_size;
-  Code codes[] = { self->code16, self->code32, self->code64 };
-  instr.set_code( codes[static_cast<std::size_t>( op_size )] );
+  // Default operand size 64 in long mode: these have no 32-bit encoding there, only 16 via a 66
+  // prefix. state().operand_size reflects prefixes alone and reads SIZE32 when there are none, so
+  // indexing the code array by it directly picked the 32-bit form for every unprefixed encoding.
+  // Same shape OpCodeHandler_PushEv already uses.
+  if ( decoder.is_64bit_mode() ) {
+    instr.set_code( op_size == OpSize::SIZE16 ? self->code16 : self->code64 );
+  } else {
+    instr.set_code( op_size == OpSize::SIZE32 ? self->code32 : self->code16 );
+  }
 
   if ( decoder.state().mod_ == 3 ) {
     decoder.set_invalid_instruction();
@@ -2311,8 +2318,16 @@ void OpCodeHandler_Sw_M::decode( const OpCodeHandler* self_ptr, Decoder& decoder
 
 void OpCodeHandler_PushOpSizeReg::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_PushOpSizeReg*>( self_ptr );
-  Code codes[] = { self->code16, self->code32, self->code64 };
-  instr.set_code( codes[get_op_size_index( decoder )] );
+  auto op_size = decoder.state().operand_size;
+  // Default operand size 64 in long mode: these have no 32-bit encoding there, only 16 via a 66
+  // prefix. state().operand_size reflects prefixes alone and reads SIZE32 when there are none, so
+  // indexing the code array by it directly picked the 32-bit form for every unprefixed encoding.
+  // Same shape OpCodeHandler_PushEv already uses.
+  if ( decoder.is_64bit_mode() ) {
+    instr.set_code( op_size == OpSize::SIZE16 ? self->code16 : self->code64 );
+  } else {
+    instr.set_code( op_size == OpSize::SIZE32 ? self->code32 : self->code16 );
+  }
   instr.set_op0_register( self->reg );
 }
 
@@ -3261,8 +3276,15 @@ void OpCodeHandler_BranchSimple::decode( const OpCodeHandler* self_ptr, Decoder&
 void OpCodeHandler_Iw_Ib::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_Iw_Ib*>( self_ptr );
   auto op_size = decoder.state().operand_size;
-  Code codes[] = { self->code16, self->code32, self->code64 };
-  instr.set_code( codes[static_cast<std::size_t>( op_size )] );
+  // Default operand size 64 in long mode: these have no 32-bit encoding there, only 16 via a 66
+  // prefix. state().operand_size reflects prefixes alone and reads SIZE32 when there are none, so
+  // indexing the code array by it directly picked the 32-bit form for every unprefixed encoding.
+  // Same shape OpCodeHandler_PushEv already uses.
+  if ( decoder.is_64bit_mode() ) {
+    instr.set_code( op_size == OpSize::SIZE16 ? self->code16 : self->code64 );
+  } else {
+    instr.set_code( op_size == OpSize::SIZE32 ? self->code32 : self->code16 );
+  }
 
   // Op0: Iw
   instr.set_op0_kind( OpKind::IMMEDIATE16 );
