@@ -408,10 +408,13 @@ void Decoder::read_op_mem_32_or_64( Instruction& instruction, uint32_t operand_i
 	    if ( !disp ) return;
 	    instruction.set_memory_displacement64( static_cast<int32_t>( *disp ) );
 	    instruction.set_memory_displ_size( 4 );
-	    if ( bitness_ == 64 ) {
+	    // Which of the two it is comes from the address size, not the bitness: a 0x67 prefix in
+	    // 64-bit mode makes this EIP-relative, and the target then wraps at 4G. Testing bitness_
+	    // instead sent every 0x67 form down the RIP path and left the EIP branch unreachable.
+	    if ( state_.address_size == OpSize::SIZE64 ) {
 	      instruction.set_memory_base( Register::RIP );
 	      state_.flags |= StateFlags::IP_REL64;
-	    } else if ( state_.address_size == OpSize::SIZE64 ) {
+	    } else if ( bitness_ == 64 ) {
 	      instruction.set_memory_base( Register::EIP );
 	      state_.flags |= StateFlags::IP_REL32;
 	    }
@@ -476,10 +479,16 @@ bool Decoder::read_sib( Instruction& instruction ) noexcept {
 	// Base: bits 2-0 + REX.B extension
 	uint32_t base = ( sib & 7 ) + state_.extra_base_register_base;
 	if ( ( sib & 7 ) == 5 && state_.mod_ == 0 ) {
-	  // Special case: base=5 with mod=0 means disp32 only
+	  // Special case: base=5 with mod=0 means disp32 only. With no base and no index there is no
+	  // register left for a consumer to read the address size off, so a 32-bit address has to be
+	  // truncated here rather than sign-extended and fixed up later.
 	  auto disp = read_u32();
 	  if ( !disp ) return false;
-	  instruction.set_memory_displacement64( static_cast<int32_t>( *disp ) );
+	  if ( state_.address_size == OpSize::SIZE32 ) {
+	    instruction.set_memory_displacement64( *disp );
+	  } else {
+	    instruction.set_memory_displacement64( static_cast<int32_t>( *disp ) );
+	  }
 	  instruction.set_memory_displ_size( 4 );
 	} else {
 	  instruction.set_memory_base( static_cast<Register>(
@@ -1029,10 +1038,13 @@ void Decoder::read_op_mem_evex( Instruction& instruction, uint32_t operand_index
 	    if ( !disp ) return;
 	    instruction.set_memory_displacement64( static_cast<int32_t>( *disp ) );
 	    instruction.set_memory_displ_size( 4 );
-	    if ( bitness_ == 64 ) {
+	    // Which of the two it is comes from the address size, not the bitness: a 0x67 prefix in
+	    // 64-bit mode makes this EIP-relative, and the target then wraps at 4G. Testing bitness_
+	    // instead sent every 0x67 form down the RIP path and left the EIP branch unreachable.
+	    if ( state_.address_size == OpSize::SIZE64 ) {
 	      instruction.set_memory_base( Register::RIP );
 	      state_.flags |= StateFlags::IP_REL64;
-	    } else if ( state_.address_size == OpSize::SIZE64 ) {
+	    } else if ( bitness_ == 64 ) {
 	      instruction.set_memory_base( Register::EIP );
 	      state_.flags |= StateFlags::IP_REL32;
 	    }
