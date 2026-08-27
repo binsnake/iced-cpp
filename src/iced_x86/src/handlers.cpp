@@ -6660,7 +6660,16 @@ void OpCodeHandler_EVEX_VK::decode( const OpCodeHandler* self_ptr, Decoder& deco
 
 void OpCodeHandler_EVEX_VkEv_REXW::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {
   auto* self = reinterpret_cast<const OpCodeHandler_EVEX_VkEv_REXW*>( self_ptr );
-  
+
+  // The source is a general purpose register, never memory -- these are the broadcast-from-GPR
+  // forms, and the broadcast-from-memory ones are separate opcodes. Every Code this handler can
+  // produce says R32_RM or R64_RM for that operand, which is the r/m field restricted to mod == 3.
+  // Reading a memory operand here handed those Codes an operand shape they do not have.
+  if ( decoder.state().mod_ != 3 ) {
+    decoder.set_invalid_instruction();
+    return;
+  }
+
   // Select code based on W bit
   bool w = ( decoder.state().flags & static_cast<uint32_t>( StateFlags::W ) ) != 0;
   instr.set_code( w ? self->code64 : self->code32 );
@@ -6671,15 +6680,10 @@ void OpCodeHandler_EVEX_VkEv_REXW::decode( const OpCodeHandler* self_ptr, Decode
   instr.set_op0_kind( OpKind::REGISTER );
   
   // Op1: Ev (r/m field) - GPR (32 or 64 bit based on W)
-  if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base;
-    Register base = w ? Register::RAX : Register::EAX;
-    instr.set_op1_register( add_reg( base, rm_idx ) );
-    instr.set_op1_kind( OpKind::REGISTER );
-  } else {
-    instr.set_op1_kind( OpKind::MEMORY );
-    decoder.read_op_mem( instr, 1 );
-  }
+  uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base;
+  Register base = w ? Register::RAX : Register::EAX;
+  instr.set_op1_register( add_reg( base, rm_idx ) );
+  instr.set_op1_kind( OpKind::REGISTER );
 }
 
 void OpCodeHandler_EVEX_KR::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instr ) {

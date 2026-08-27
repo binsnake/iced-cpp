@@ -63,14 +63,31 @@ Code TableDeserializer::read_code() noexcept {
   return static_cast<Code>( v );
 }
 
+// The serialized tables store only the first Code of a group and leave the rest to be counted
+// off from it, which assumes the generator laid the group out contiguously. That holds almost
+// everywhere. Where it does not, the count runs into whatever Code happens to sit next in the
+// enum -- for the VMOVLHPS/VMOVHPS pair, the EVEX form of the first instruction sits between the
+// two VEX forms, so the memory-form lookup landed on an EVEX register-only Code and a legal
+// `vmovhps xmm, xmm, m64` decoded as something that takes no memory operand at all.
+//
+// Anything added here needs the same evidence: the derived Code's own operand table says the
+// slot is register-only while the encoding that reached it was a memory one. KuberaDecoder's
+// DerivedCodesAgreeWithTheirOwnOperandTables test is what turns that into a failing build.
+[[nodiscard]] static Code next_code_in_group( std::uint32_t base, std::uint32_t offset ) noexcept {
+  if ( base == static_cast<std::uint32_t>( Code::VEX_VMOVLHPS_XMM_XMM_XMM ) && offset == 1 ) {
+    return Code::VEX_VMOVHPS_XMM_XMM_M64;
+  }
+  return static_cast<Code>( base + offset );
+}
+
 std::pair<Code, Code> TableDeserializer::read_code2() noexcept {
   auto v = reader_.read_compressed_u32();
-  return { static_cast<Code>( v ), static_cast<Code>( v + 1 ) };
+  return { static_cast<Code>( v ), next_code_in_group( v, 1 ) };
 }
 
 std::tuple<Code, Code, Code> TableDeserializer::read_code3() noexcept {
   auto v = reader_.read_compressed_u32();
-  return { static_cast<Code>( v ), static_cast<Code>( v + 1 ), static_cast<Code>( v + 2 ) };
+  return { static_cast<Code>( v ), next_code_in_group( v, 1 ), next_code_in_group( v, 2 ) };
 }
 
 Register TableDeserializer::read_register() noexcept {
