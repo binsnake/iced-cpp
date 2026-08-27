@@ -2047,9 +2047,10 @@ void OpCodeHandler_C_R::decode( const OpCodeHandler* self_ptr, Decoder& decoder,
     gpr_base = Register::EAX;
   }
 
-  // Op0: CRn (control register from reg field)
+  // Op0: CRn or DRn from the reg field. 0F 22 and 0F 23 share this handler and the table hands it
+  // the right base register for each; hardcoding CR0 made every MOV DR report a control register.
   uint32_t cr_idx = decoder.state().reg + decoder.state().extra_register_base;
-  instr.set_op0_register( add_reg( Register::CR0, cr_idx ) );
+  instr.set_op0_register( add_reg( self->base_reg, cr_idx ) );
   instr.set_op0_kind( OpKind::REGISTER );
 
   // Op1: r32/64 (from r/m field)
@@ -2076,9 +2077,9 @@ void OpCodeHandler_R_C::decode( const OpCodeHandler* self_ptr, Decoder& decoder,
   instr.set_op0_register( add_reg( gpr_base, rm_idx ) );
   instr.set_op0_kind( OpKind::REGISTER );
 
-  // Op1: CRn (control register from reg field)
+  // Op1: CRn or DRn from the reg field -- see OpCodeHandler_C_R above.
   uint32_t cr_idx = decoder.state().reg + decoder.state().extra_register_base;
-  instr.set_op1_register( add_reg( Register::CR0, cr_idx ) );
+  instr.set_op1_register( add_reg( self->base_reg, cr_idx ) );
   instr.set_op1_kind( OpKind::REGISTER );
 }
 
@@ -2235,6 +2236,11 @@ void OpCodeHandler_MP::decode( const OpCodeHandler* self_ptr, Decoder& decoder, 
   } else {
     instr.set_op0_kind( OpKind::MEMORY );
     decoder.read_op_mem( instr, 0 );
+    // MOVNTQ is the only Code routed here and it has two operands. Leaving the second one alone
+    // meant it read back as (REGISTER, NONE), which passes an operand-kind check and then turns
+    // into a register index of zero or an underflow depending on what the reader subtracts.
+    instr.set_op1_register( add_reg( Register::MM0, decoder.state().reg ) );
+    instr.set_op1_kind( OpKind::REGISTER );
   }
 }
 
@@ -3650,6 +3656,13 @@ void OpCodeHandler_VW::decode( const OpCodeHandler* self_ptr, Decoder& decoder, 
   
   // Op1: Memory or XMM register (r/m field)
   if ( decoder.state().mod_ < 3 ) {
+    // Several of these opcodes mean a different instruction entirely with a memory operand --
+    // 0F 12 is MOVHLPS reg-reg but MOVLPS from memory. The table carries both Codes; only the
+    // register one was ever being set, so a memory encoding came back wearing a Code whose own
+    // operand table says register, and anything dispatching on Code ran the wrong semantics.
+    if ( self->code_w != Code::INVALID ) {
+      instr.set_code( self->code_w );
+    }
     instr.set_op1_kind( OpKind::MEMORY );
     decoder.read_op_mem( instr, 1 );
   } else {
@@ -5757,7 +5770,7 @@ void OpCodeHandler_EVEX_VkW::decode( const OpCodeHandler* self_ptr, Decoder& dec
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg2, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -5797,7 +5810,7 @@ void OpCodeHandler_EVEX_VkW_er::decode( const OpCodeHandler* self_ptr, Decoder& 
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg2, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     
@@ -5839,7 +5852,7 @@ void OpCodeHandler_EVEX_VkHW::decode( const OpCodeHandler* self_ptr, Decoder& de
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg3, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg (no broadcast/rounding for this handler)
@@ -5879,7 +5892,7 @@ void OpCodeHandler_EVEX_VkHW_er::decode( const OpCodeHandler* self_ptr, Decoder&
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     
@@ -5926,7 +5939,7 @@ void OpCodeHandler_EVEX_VkHW_er_ur::decode( const OpCodeHandler* self_ptr, Decod
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     
@@ -5967,7 +5980,7 @@ void OpCodeHandler_EVEX_VkWIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6017,7 +6030,7 @@ void OpCodeHandler_EVEX_VkWIb_er::decode( const OpCodeHandler* self_ptr, Decoder
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Handle embedded rounding for reg form
@@ -6061,7 +6074,7 @@ void OpCodeHandler_EVEX_VkHWIb::decode( const OpCodeHandler* self_ptr, Decoder& 
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg3, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6110,7 +6123,7 @@ void OpCodeHandler_EVEX_VkHWIb_er::decode( const OpCodeHandler* self_ptr, Decode
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Handle embedded rounding for reg form
@@ -6245,7 +6258,7 @@ void OpCodeHandler_EVEX_VW::decode( const OpCodeHandler* self_ptr, Decoder& deco
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6279,7 +6292,7 @@ void OpCodeHandler_EVEX_VW_er::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // VW_er always uses SAE (suppress all exceptions) for B bit
@@ -6312,7 +6325,7 @@ void OpCodeHandler_EVEX_WV::decode( const OpCodeHandler* self_ptr, Decoder& deco
   
   // Op0: W (r/m field) - dest
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op0_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6344,7 +6357,7 @@ void OpCodeHandler_EVEX_WkV::decode( const OpCodeHandler* self_ptr, Decoder& dec
   
   // Op0: W{k} (r/m field) - dest with mask
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op0_register( add_reg( self->base_reg1, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6383,7 +6396,7 @@ void OpCodeHandler_EVEX_WkVIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op0: W{k} (r/m field) - dest with mask
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op0_register( add_reg( self->base_reg1, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6424,7 +6437,7 @@ void OpCodeHandler_EVEX_WkVIb_er::decode( const OpCodeHandler* self_ptr, Decoder
   
   // Op0: W{k} (r/m field) - dest with mask
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op0_register( add_reg( self->base_reg1, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
     // Handle embedded rounding for reg form
@@ -6460,7 +6473,7 @@ void OpCodeHandler_EVEX_WkHV::decode( const OpCodeHandler* self_ptr, Decoder& de
   
   // Op0: W{k} (r/m field) - dest with mask
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op0_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op0_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6507,7 +6520,7 @@ void OpCodeHandler_EVEX_VHW::decode( const OpCodeHandler* self_ptr, Decoder& dec
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6539,7 +6552,7 @@ void OpCodeHandler_EVEX_VHWIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6680,7 +6693,7 @@ void OpCodeHandler_EVEX_KR::decode( const OpCodeHandler* self_ptr, Decoder& deco
   instr.set_op0_kind( OpKind::REGISTER );
   
   // Op1: R (r/m field) - vector register source
-  uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+  uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
   instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
   instr.set_op1_kind( OpKind::REGISTER );
 }
@@ -6702,7 +6715,7 @@ void OpCodeHandler_EVEX_KkHW::decode( const OpCodeHandler* self_ptr, Decoder& de
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6742,7 +6755,7 @@ void OpCodeHandler_EVEX_KkHWIb::decode( const OpCodeHandler* self_ptr, Decoder& 
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6791,7 +6804,7 @@ void OpCodeHandler_EVEX_KkHWIb_sae::decode( const OpCodeHandler* self_ptr, Decod
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Handle SAE for reg form
@@ -6840,7 +6853,7 @@ void OpCodeHandler_EVEX_KkWIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6889,7 +6902,7 @@ void OpCodeHandler_EVEX_KP1HW::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op2: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op2_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op2_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6916,7 +6929,7 @@ void OpCodeHandler_EVEX_HkWIb::decode( const OpCodeHandler* self_ptr, Decoder& d
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -6960,7 +6973,7 @@ void OpCodeHandler_EVEX_HWIb::decode( const OpCodeHandler* self_ptr, Decoder& de
   
   // Op1: W (r/m field)
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Validate: b bit must be 0 for reg-reg
@@ -7225,7 +7238,7 @@ void OpCodeHandler_EVEX_Gv_W_er::decode( const OpCodeHandler* self_ptr, Decoder&
   
   // Op1: W (r/m field) - vector register source
   if ( decoder.state().mod_ == 3 ) {
-    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base + decoder.state().extra_base_register_base_evex;
+    uint32_t rm_idx = decoder.state().rm + decoder.state().extra_base_register_base_evex;
     instr.set_op1_register( add_reg( self->base_reg, rm_idx ) );
     instr.set_op1_kind( OpKind::REGISTER );
     // Handle embedded rounding / SAE for reg-reg form
