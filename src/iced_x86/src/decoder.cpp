@@ -1049,9 +1049,11 @@ void Decoder::read_op_mem_evex( Instruction& instruction, uint32_t operand_index
 	      state_.flags |= StateFlags::IP_REL32;
 	    }
 	  } else {
-	    // Simple base register
+	    // A memory base is four bits: rm plus EVEX.B. extra_base_register_base_evex packs B
+	    // together with X, and X only ever extends the SIB index, which read_sib handles. Adding
+	    // it here counted B twice and folded X in on top.
 	    instruction.set_memory_base( static_cast<Register>(
-	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base + state_.extra_base_register_base_evex ) );
+	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base ) );
 	  }
 	} else if ( state_.mod_ == 1 ) {
 	  // 8-bit displacement with EVEX compressed displacement scaling
@@ -1059,7 +1061,7 @@ void Decoder::read_op_mem_evex( Instruction& instruction, uint32_t operand_index
 	    read_sib( instruction );
 	  } else {
 	    instruction.set_memory_base( static_cast<Register>(
-	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base + state_.extra_base_register_base_evex ) );
+	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base ) );
 	  }
 	  auto disp = read_byte();
 	  if ( !disp ) return;
@@ -1075,7 +1077,7 @@ void Decoder::read_op_mem_evex( Instruction& instruction, uint32_t operand_index
 	    read_sib( instruction );
 	  } else {
 	    instruction.set_memory_base( static_cast<Register>(
-	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base + state_.extra_base_register_base_evex ) );
+	      static_cast<uint32_t>( base_reg ) + state_.rm + state_.extra_base_register_base ) );
 	  }
 	  auto disp = read_u32();
 	  if ( !disp ) return;
