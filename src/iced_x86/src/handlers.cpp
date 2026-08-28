@@ -285,12 +285,38 @@ void OpCodeHandler_Options1632::decode( const OpCodeHandler* self_ptr, Decoder& 
 // VEX/EVEX/XOP/D3NOW Handlers - stubs (just set invalid for now)
 // ============================================================================
 
-void OpCodeHandler_VEX2::decode( const OpCodeHandler* /*self_ptr*/, Decoder& decoder, Instruction& instruction ) {
-  decoder.decode_vex2( instruction );
+// Outside 64-bit mode C4, C5 and 62 are only a VEX/EVEX prefix when the byte after them has
+// mod == 3. With mod != 3 they are LES, LDS and BOUND, which is what handler_mem decodes. That
+// field was being stored and then ignored, so all three legacy instructions came back as a decode
+// error and the byte count was wrong on top of it.
+namespace {
+
+[[nodiscard]] bool is_vex_or_evex_prefix( const Decoder& decoder ) {
+  return decoder.is_64bit_mode() || ( decoder.state().modrm & 0xC0 ) == 0xC0;
 }
 
-void OpCodeHandler_VEX3::decode( const OpCodeHandler* /*self_ptr*/, Decoder& decoder, Instruction& instruction ) {
-  decoder.decode_vex3( instruction );
+void decode_via_handler_mem( const HandlerEntry& handler, Decoder& decoder, Instruction& instruction ) {
+  handler.decode( handler.handler, decoder, instruction );
+}
+
+}  // namespace
+
+void OpCodeHandler_VEX2::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instruction ) {
+  auto* self = reinterpret_cast<const OpCodeHandler_VEX2*>( self_ptr );
+  if ( is_vex_or_evex_prefix( decoder ) ) {
+    decoder.decode_vex2( instruction );
+  } else {
+    decode_via_handler_mem( self->handler_mem, decoder, instruction );
+  }
+}
+
+void OpCodeHandler_VEX3::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instruction ) {
+  auto* self = reinterpret_cast<const OpCodeHandler_VEX3*>( self_ptr );
+  if ( is_vex_or_evex_prefix( decoder ) ) {
+    decoder.decode_vex3( instruction );
+  } else {
+    decode_via_handler_mem( self->handler_mem, decoder, instruction );
+  }
 }
 
 void OpCodeHandler_XOP::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instruction ) {
@@ -308,8 +334,13 @@ void OpCodeHandler_XOP::decode( const OpCodeHandler* self_ptr, Decoder& decoder,
   }
 }
 
-void OpCodeHandler_EVEX::decode( const OpCodeHandler* /*self_ptr*/, Decoder& decoder, Instruction& instruction ) {
-  decoder.decode_evex( instruction );
+void OpCodeHandler_EVEX::decode( const OpCodeHandler* self_ptr, Decoder& decoder, Instruction& instruction ) {
+  auto* self = reinterpret_cast<const OpCodeHandler_EVEX*>( self_ptr );
+  if ( is_vex_or_evex_prefix( decoder ) ) {
+    decoder.decode_evex( instruction );
+  } else {
+    decode_via_handler_mem( self->handler_mem, decoder, instruction );
+  }
 }
 
 void OpCodeHandler_D3NOW::decode( const OpCodeHandler* /*self_ptr*/, Decoder& decoder, Instruction& instruction ) {
